@@ -404,7 +404,6 @@ public class BaseAction extends ActionSupport implements Preparable, SessionAwar
   // Variables
   private String crpSession;
 
-  private String customTextHeader;
   private String feedbackBIReportName;
 
   protected boolean dataSaved;
@@ -1371,32 +1370,6 @@ public class BaseAction extends ActionSupport implements Preparable, SessionAwar
     }
 
     return false;
-  }
-
-  /**
-   * Verify if the project have Cluster of Activity to activate Budget by CoA
-   *
-   * @return true if the project have CoA or false otherwise.
-   */
-  public Boolean canEditBudgetByCoAs(long projectID) {
-    Project project = this.projectManager.getProjectById(projectID);
-    if (this.hasSpecificities(this.getCrpEnableBudgetByCoas())) {
-      if (project.getProjectClusterActivities().stream()
-        .filter(pc -> pc.isActive() && pc.getPhase().equals(this.getActualPhase()))
-        .collect(Collectors.toList()) == null) {
-        return false;
-      }
-      if (project.getProjectClusterActivities().stream()
-        .filter(pc -> pc.isActive() && pc.getPhase().equals(this.getActualPhase())).collect(Collectors.toList())
-        .size() > 1) {
-        return true;
-      } else {
-        return false;
-      }
-    } else {
-      return false;
-    }
-
   }
 
   public boolean canEditCenterType() {
@@ -2820,10 +2793,6 @@ public class BaseAction extends ActionSupport implements Preparable, SessionAwar
     return globalUnits;
   }
 
-  public String getCrpEnableBudgetByCoas() {
-    return APConstants.CRP_ENABLE_BUDGETBYCOAS;
-  }
-
   public String getCrpEnableBudgetExecution() {
     return APConstants.CRP_ENABLE_BUDGET_EXECUTION;
   }
@@ -3056,23 +3025,6 @@ public class BaseAction extends ActionSupport implements Preparable, SessionAwar
       }
     }
     return u;
-  }
-
-  /**
-   * Get the Custom text from parameters table that for the testing banner
-   *
-   * @return the custom text header from parameters table
-   */
-  public String getCustomTextHeader() {
-    try {
-      if (APConstants.CRP_LOGIN_HEADER_TEXT != null
-        && this.getSession().get(APConstants.CRP_LOGIN_HEADER_TEXT) != null) {
-        customTextHeader = (String) this.getSession().get(APConstants.CRP_LOGIN_HEADER_TEXT);
-      }
-    } catch (Exception e) {
-      LOG.error("Could not read the custom login header text from the session", e);
-    }
-    return customTextHeader;
   }
 
   /**
@@ -4333,19 +4285,17 @@ public class BaseAction extends ActionSupport implements Preparable, SessionAwar
   }
 
   public ClusterType getManagementClusterType() {
-    ClusterType clusterType = new ClusterType();
-
-    List<ClusterType> clusterTypes = new ArrayList<>();
-    clusterTypes = clusterTypeManager.findAll();
-    if (clusterTypes != null && !clusterTypes.isEmpty()) {
-      if (clusterTypes.stream().filter(c -> c.getName().contains("Management")).collect(Collectors.toList()) != null
-        && !clusterTypes.stream().filter(c -> c.getName().contains("Management")).collect(Collectors.toList())
-          .isEmpty()) {
-        clusterType =
-          clusterTypes.stream().filter(c -> c.getName().contains("Management")).collect(Collectors.toList()).get(0);
+    List<ClusterType> types = clusterTypeManager.findAll();
+    if (types != null) {
+      for (ClusterType type : types) {
+        // The catalogue allows a null name, and an unguarded contains() here breaks every caller of this method.
+        if (type.getName() != null && type.getName().contains("Management")) {
+          return type;
+        }
       }
     }
-    return clusterType;
+    // Callers expect a non-null instance; an empty one means the catalogue has no Management row.
+    return new ClusterType();
   }
 
   /**
@@ -5718,29 +5668,6 @@ public class BaseAction extends ActionSupport implements Preparable, SessionAwar
     }
   }
 
-  /**
-   * This method return the first AF AICCRA ID Phase
-   *
-   * @return ID value of first AICCRA AF phase
-   */
-  public long getStartAFPhase() {
-    long startAFPhase = 423;
-
-    if (this.getSession().get(APConstants.CRP_AICCRA_AF_START_PHASE) != null) {
-      try {
-        startAFPhase = Long.parseLong((String) this.getSession().get(APConstants.CRP_AICCRA_AF_START_PHASE));
-      } catch (NumberFormatException e) {
-        LOG.error("The session value of {} is not a number, so the default start AF phase {} is used",
-          APConstants.CRP_AICCRA_AF_START_PHASE, startAFPhase, e);
-      }
-    } else {
-      // This parameter only exists for AICCRA, so any other global unit falls back to the default phase.
-      LOG.debug("{} is not in the session, so the default start AF phase {} is used",
-        APConstants.CRP_AICCRA_AF_START_PHASE, startAFPhase);
-    }
-    return startAFPhase;
-  }
-
   public Submission getSubmission() {
     return this.submission;
   }
@@ -6327,24 +6254,6 @@ public class BaseAction extends ActionSupport implements Preparable, SessionAwar
   public boolean isAdmin() {
     return this.securityContext.hasRole("Admin");
   }
-
-  /**
-   * This method return true if the phase belong to an AF AICCRA phase
-   *
-   * @param phaseID is the phase ID to be identified.
-   * @return Boolean object with the value
-   */
-  public boolean isAFPhase(long phaseID) {
-    // getStartAFPhase() already handles a malformed session value and falls back to the default phase.
-    long startAFPhase = this.getStartAFPhase();
-
-    if (startAFPhase != 0 && phaseID != 0 && phaseID >= startAFPhase) {
-      return true;
-    } else {
-      return false;
-    }
-  }
-
 
   public boolean isAiccra() {
     return this.getCurrentCrp() != null && this.getCurrentCrp().isAiccra();
@@ -7376,7 +7285,7 @@ public class BaseAction extends ActionSupport implements Preparable, SessionAwar
     // [end] 19/06/2024 cgamboa
 
 
-    // aqui se debe aplicar la nueva funcion getCompleteDeliverableListByPhase
+    // The new getCompleteDeliverableListByPhase function should be applied here
 
     if (deliverableID != null && phaseID != null) {
       Deliverable deliverable = this.deliverableManager.getDeliverableById(deliverableID);
@@ -7723,21 +7632,6 @@ public class BaseAction extends ActionSupport implements Preparable, SessionAwar
     return true;
   }
 
-  public boolean isManagementCluster(long id) {
-    boolean isManagement = false;
-    Project project = projectManager.getProjectById(id);
-    if (project != null) {
-      project.setProjectInfo(project.getProjecInfoPhase(this.getActualPhase()));
-      if (project.getProjectInfo() != null && project.getProjectInfo().getClusterType() != null
-        && project.getProjectInfo().getClusterType().getId() != null) {
-        if (project.getProjectInfo().getClusterType().getId().equals(this.getManagementClusterType().getId())) {
-          isManagement = true;
-        }
-      }
-    }
-    return isManagement;
-  }
-
   /**
    * Check if the project was created in a new Center
    *
@@ -7933,6 +7827,25 @@ public class BaseAction extends ActionSupport implements Preparable, SessionAwar
       LOG.debug("Could not read the upkeep flag of the actual phase, so the progress is reported as inactive", e);
       return false;
     }
+  }
+
+  /**
+   * Tells whether a project creates its own activities by typing the activity title, instead of picking it from the
+   * Activity management catalog of the Global Unit.
+   * <p>
+   * The answer comes from the {@code project_activity_creation_active} specificity. When the Global Unit has no custom
+   * parameter for it, the legacy behaviour is kept: every Global Unit typed its own titles until the catalog was
+   * introduced for AICCRA in 2021.
+   *
+   * @return true when the activity title is a free text field, false when it comes from the catalog
+   */
+  public boolean isProjectActivityCreationActive() {
+    String value = this.specificityValue(APConstants.PROJECT_ACTIVITY_CREATION_ACTIVE);
+    if (value == null) {
+      return !this.isAiccra();
+    }
+
+    return Boolean.parseBoolean(value);
   }
 
   /**
@@ -8937,10 +8850,6 @@ public class BaseAction extends ActionSupport implements Preparable, SessionAwar
 
   public void setCurrentCenter(GlobalUnit currentCenter) {
     this.currentCenter = currentCenter;
-  }
-
-  public void setCustomTextHeader(String customTextHeader) {
-    this.customTextHeader = customTextHeader;
   }
 
   public void setDataSaved(boolean dataSaved) {
