@@ -99,6 +99,7 @@ import org.cgiar.ccafs.marlo.security.APCustomRealm;
 import org.cgiar.ccafs.marlo.security.Permission;
 import org.cgiar.ccafs.marlo.utils.APConfig;
 import org.cgiar.ccafs.marlo.utils.AutoSaveReader;
+import org.cgiar.ccafs.marlo.utils.EmailLayout;
 import org.cgiar.ccafs.marlo.utils.HistoryComparator;
 import org.cgiar.ccafs.marlo.utils.HistoryDifference;
 import org.cgiar.ccafs.marlo.utils.SendMailS;
@@ -106,7 +107,6 @@ import org.cgiar.ccafs.marlo.validation.projects.ProjectPartnersValidator;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -758,9 +758,11 @@ public class ProjectPartnerAction extends BaseAction {
   private void notifyNewUserCreated(User user) {
 
     if (user != null && user.getId() != null) {
-      user = userManager.getUser(user.getId());
-
-      if (!user.isActive()) {
+      Long userId = user.getId();
+      user = userManager.getUser(userId);
+      if (user == null) {
+        LOG.warn("The user {} does not exist, so no account creation email is sent", userId);
+      } else if (!user.isActive()) {
         String toEmail = user.getEmail();
         String ccEmail = "";
         String bbcEmails = this.config.getEmailNotification();
@@ -776,14 +778,27 @@ public class ProjectPartnerAction extends BaseAction {
 
         // Building the Email message:
         StringBuilder message = new StringBuilder();
-        message.append(this.getText("email.dear", new String[] {user.getFirstName()}));
+        message.append(this.getText("email.role.dear", new String[] {user.getFirstName()}));
 
         // get CRPAdmin contacts
         String crpAdmins = "";
-        long adminRol = Long.parseLong((String) this.getSession().get(APConstants.CRP_ADMIN_ROLE));
-        Role roleAdmin = roleManager.getRoleById(adminRol);
-        List<UserRole> userRoles = roleAdmin.getUserRoles().stream()
-          .filter(ur -> ur.getUser() != null && ur.getUser().isActive()).collect(Collectors.toList());
+        // The CRP admin role is a custom parameter of the Global Unit, so a session without one does not hold it.
+        Object adminRoleParam = this.getSession() == null ? null : this.getSession().get(APConstants.CRP_ADMIN_ROLE);
+        Role roleAdmin = null;
+        if (adminRoleParam != null) {
+          try {
+            roleAdmin = roleManager.getRoleById(Long.parseLong(adminRoleParam.toString()));
+          } catch (NumberFormatException e) {
+            LOG.error("The CRP admin role parameter {} is not a role id", adminRoleParam, e);
+          }
+        }
+        List<UserRole> userRoles = new ArrayList<>();
+        if (roleAdmin == null) {
+          LOG.error("The CRP admin role {} was not found, so the email lists no CRP admins", adminRoleParam);
+        } else {
+          userRoles = roleAdmin.getUserRoles().stream()
+            .filter(ur -> ur.getUser() != null && ur.getUser().isActive()).collect(Collectors.toList());
+        }
         for (UserRole userRole : userRoles) {
           if (crpAdmins.isEmpty()) {
             crpAdmins += userRole.getUser().getComposedCompleteName() + " (" + userRole.getUser().getEmail() + ")";
@@ -794,12 +809,16 @@ public class ProjectPartnerAction extends BaseAction {
         }
 
         message.append(this.getText("email.newUser.part1", new String[] {this.getText("email.newUser.listRoles"),
-          config.getBaseUrl(), user.getEmail(), password, this.getText("email.support", new String[] {crpAdmins})}));
-        message.append(this.getText("email.bye"));
+          config.getBaseUrl(), user.getEmail(), password,
+          this.getText("email.role.support", new String[] {crpAdmins})}));
+        message.append(this.getText("email.role.bye"));
 
         Map<String, Object> mapUser = new HashMap<>();
         mapUser.put("user", user);
         mapUser.put("password", password);
+        if (this.getUsersToActive() == null) {
+          this.setUsersToActive(new ArrayList<>());
+        }
         this.getUsersToActive().add(mapUser);
         // Send UserManual.pdf
         String contentType = "application/pdf";
@@ -814,9 +833,12 @@ public class ProjectPartnerAction extends BaseAction {
 
         try {
           inputStream = this.getClass().getResourceAsStream("/manual/" + fileName);
-          buffer = readFully(inputStream);
-        } catch (FileNotFoundException e) {
-          LOG.error("The manual file {} was not found", fileName, e);
+          if (inputStream == null) {
+            // getResourceAsStream returns null instead of throwing when the manual is missing.
+            LOG.error("The manual file {} was not found, so the email goes out without it", fileName);
+          } else {
+            buffer = readFully(inputStream);
+          }
         } catch (IOException e) {
           LOG.error("Could not read the manual file {}", fileName, e);
         } finally {
@@ -833,10 +855,11 @@ public class ProjectPartnerAction extends BaseAction {
         if (!this.isCenterGlobalUnit()) {
           if (this.validateEmailNotification()) {
             if (buffer != null && fileName != null && contentType != null) {
-              sendMail.send(toEmail, ccEmail, bbcEmails, subject, message.toString(), buffer, contentType, fileName,
-                true);
+              sendMail.send(toEmail, ccEmail, bbcEmails, subject, EmailLayout.wrap(this, message.toString()),
+                buffer, contentType, fileName, true);
             } else {
-              sendMail.send(toEmail, ccEmail, bbcEmails, subject, message.toString(), null, null, null, true);
+              sendMail.send(toEmail, ccEmail, bbcEmails, subject, EmailLayout.wrap(this, message.toString()),
+                null, null, null, true);
             }
           }
         }
@@ -957,7 +980,7 @@ public class ProjectPartnerAction extends BaseAction {
     // message
     StringBuilder message = new StringBuilder();
     // Building the Email message:
-    message.append(this.getText("email.dear", new String[] {userAssigned.getFirstName()}));
+    message.append(this.getText("email.role.dear", new String[] {userAssigned.getFirstName()}));
     message.append(this.getText("email.project.assigned",
       new String[] {projectRole, crp, project.getProjecInfoPhase(this.getActualPhase()).getTitle(),
         project.getStandardIdentifier(Project.EMAIL_SUBJECT_IDENTIFIER)}));
@@ -966,13 +989,14 @@ public class ProjectPartnerAction extends BaseAction {
     } else {
       message.append(this.getText("email.project.coordinator.responsabilities"));
     }
-    message.append(this.getText("email.support", new String[] {crpAdmins}));
-    message.append(this.getText("email.getStarted"));
-    message.append(this.getText("email.bye"));
+    message.append(this.getText("email.role.support", new String[] {crpAdmins}));
+    message.append(this.getText("email.role.getStarted"));
+    message.append(this.getText("email.role.bye"));
 
     // TODO Disable temporally CIAT MARLO send email.
     if (!this.isCenterGlobalUnit()) {
-      sendMail.send(toEmail, ccEmail, bbcEmails, subject, message.toString(), null, null, null, true);
+      sendMail.send(toEmail, ccEmail, bbcEmails, subject, EmailLayout.wrap(this, message.toString()),
+        null, null, null, true);
     }
 
     // TIP notification email
@@ -1081,7 +1105,7 @@ public class ProjectPartnerAction extends BaseAction {
     // message
     StringBuilder message = new StringBuilder();
     // Building the Email message:
-    message.append(this.getText("email.dear", new String[] {userUnassigned.getFirstName()}));
+    message.append(this.getText("email.role.dear", new String[] {userUnassigned.getFirstName()}));
 
     if (role.getId() == plRole.getId().longValue()) {
       message.append(this.getText("email.project.leader.unAssigned",
@@ -1093,12 +1117,13 @@ public class ProjectPartnerAction extends BaseAction {
           project.getStandardIdentifier(Project.EMAIL_SUBJECT_IDENTIFIER)}));
     }
 
-    message.append(this.getText("email.support", new String[] {crpAdmins}));
-    message.append(this.getText("email.bye"));
+    message.append(this.getText("email.role.support", new String[] {crpAdmins}));
+    message.append(this.getText("email.role.bye"));
 
     // TODO Disable temporally CIAT MARLO send email.
     if (!this.isCenterGlobalUnit()) {
-      sendMail.send(toEmail, ccEmail, bbcEmails, subject, message.toString(), null, null, null, true);
+      sendMail.send(toEmail, ccEmail, bbcEmails, subject, EmailLayout.wrap(this, message.toString()),
+        null, null, null, true);
     }
   }
 

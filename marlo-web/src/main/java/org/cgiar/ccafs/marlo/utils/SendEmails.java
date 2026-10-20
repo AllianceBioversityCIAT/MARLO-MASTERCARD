@@ -21,7 +21,6 @@ import org.cgiar.ccafs.marlo.data.model.User;
 import org.cgiar.ccafs.marlo.data.model.UserRole;
 
 import java.io.ByteArrayOutputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -263,9 +262,11 @@ public class SendEmails {
   private static void notifyNewUserCreated(User user) {
 
     if (user != null && user.getId() != null) {
-      user = userDAO.getUser(user.getId());
-
-      if (!user.isActive()) {
+      Long userId = user.getId();
+      user = userDAO.getUser(userId);
+      if (user == null) {
+        LOG.warn("The user {} does not exist, so no account creation email is sent", userId);
+      } else if (!user.isActive()) {
         /**
          * So inactive users are being set to active once they are notified????
          */
@@ -286,14 +287,28 @@ public class SendEmails {
 
         // Building the Email message:
         StringBuilder message = new StringBuilder();
-        message.append(action.getText("email.dear", new String[] {user.getFirstName()}));
+        message.append(action.getText("email.role.dear", new String[] {user.getFirstName()}));
 
         // get CRPAdmin contacts
         String crpAdmins = "";
-        long adminRol = Long.parseLong((String) action.getSession().get(APConstants.CRP_ADMIN_ROLE));
-        Role roleAdmin = roleDAO.find(adminRol);
-        List<UserRole> userRoles = roleAdmin.getUserRoles().stream()
-          .filter(ur -> ur.getUser() != null && ur.getUser().isActive()).collect(Collectors.toList());
+        // The CRP admin role is a custom parameter of the Global Unit, so a session without one does not hold it.
+        Object adminRoleParam =
+          action.getSession() == null ? null : action.getSession().get(APConstants.CRP_ADMIN_ROLE);
+        Role roleAdmin = null;
+        if (adminRoleParam != null) {
+          try {
+            roleAdmin = roleDAO.find(Long.parseLong(adminRoleParam.toString()));
+          } catch (NumberFormatException e) {
+            LOG.error("The CRP admin role parameter {} is not a role id", adminRoleParam, e);
+          }
+        }
+        List<UserRole> userRoles = new ArrayList<>();
+        if (roleAdmin == null) {
+          LOG.error("The CRP admin role {} was not found, so the email lists no CRP admins", adminRoleParam);
+        } else {
+          userRoles = roleAdmin.getUserRoles().stream()
+            .filter(ur -> ur.getUser() != null && ur.getUser().isActive()).collect(Collectors.toList());
+        }
         for (UserRole userRole : userRoles) {
           if (crpAdmins.isEmpty()) {
             crpAdmins += userRole.getUser().getComposedCompleteName() + " (" + userRole.getUser().getEmail() + ")";
@@ -305,12 +320,15 @@ public class SendEmails {
 
         message.append(action.getText("email.newUser.part1",
           new String[] {action.getText("email.newUser.listRoles"), action.getConfig().getBaseUrl(), user.getEmail(),
-            password, action.getText("email.support", new String[] {crpAdmins})}));
+            password, action.getText("email.role.support", new String[] {crpAdmins})}));
         // message.append(action);
 
         Map<String, Object> mapUser = new HashMap<>();
         mapUser.put("user", user);
         mapUser.put("password", password);
+        if (action.getUsersToActive() == null) {
+          action.setUsersToActive(new ArrayList<>());
+        }
         action.getUsersToActive().add(mapUser);
         usersEmail.add(user.getEmail());
         users.add(user);
@@ -327,9 +345,12 @@ public class SendEmails {
 
         try {
           inputStream = action.getClass().getResourceAsStream("/manual/" + fileName);
-          buffer = readFully(inputStream);
-        } catch (FileNotFoundException e) {
-          LOG.error("The manual file {} was not found", fileName, e);
+          if (inputStream == null) {
+            // getResourceAsStream returns null instead of throwing when the manual is missing.
+            LOG.error("The manual file {} was not found, so the email goes out without it", fileName);
+          } else {
+            buffer = readFully(inputStream);
+          }
         } catch (IOException e) {
           LOG.error("Could not read the manual file {}", fileName, e);
         } finally {
@@ -343,9 +364,11 @@ public class SendEmails {
         }
 
         if (buffer != null && fileName != null && contentType != null) {
-          sendMail.send(toEmail, ccEmail, bbcEmails, subject, message.toString(), buffer, contentType, fileName, true);
+          sendMail.send(toEmail, ccEmail, bbcEmails, subject, EmailLayout.wrap(action, message.toString()),
+            buffer, contentType, fileName, true);
         } else {
-          sendMail.send(toEmail, ccEmail, bbcEmails, subject, message.toString(), null, null, null, true);
+          sendMail.send(toEmail, ccEmail, bbcEmails, subject, EmailLayout.wrap(action, message.toString()),
+            null, null, null, true);
         }
       }
     }
@@ -407,7 +430,7 @@ public class SendEmails {
     // message
     StringBuilder message = new StringBuilder();
     // Building the Email message:
-    message.append(action.getText("email.dear", new String[] {userAssigned.getFirstName()}));
+    message.append(action.getText("email.role.dear", new String[] {userAssigned.getFirstName()}));
     message.append(action.getText("email.project.assigned",
       new String[] {projectRole, crp, project.getProjecInfoPhase(action.getActualPhase()).getTitle(),
         project.getStandardIdentifier(Project.EMAIL_SUBJECT_IDENTIFIER)}));
@@ -416,11 +439,12 @@ public class SendEmails {
     } else {
       message.append(action.getText("email.project.coordinator.responsabilities"));
     }
-    message.append(action.getText("email.support", new String[] {crpAdmins}));
-    message.append(action.getText("email.getStarted"));
-    message.append(action.getText("email.bye"));
+    message.append(action.getText("email.role.support", new String[] {crpAdmins}));
+    message.append(action.getText("email.role.getStarted"));
+    message.append(action.getText("email.role.bye"));
 
-    sendMail.send(toEmail, ccEmail, bbcEmails, subject, message.toString(), null, null, null, true);
+    sendMail.send(toEmail, ccEmail, bbcEmails, subject, EmailLayout.wrap(action, message.toString()),
+      null, null, null, true);
   }
 
   public static byte[] readFully(InputStream stream) throws IOException {

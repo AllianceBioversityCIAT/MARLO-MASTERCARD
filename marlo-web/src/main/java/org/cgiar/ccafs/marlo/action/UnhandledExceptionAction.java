@@ -15,6 +15,9 @@
 package org.cgiar.ccafs.marlo.action;
 
 import org.cgiar.ccafs.marlo.data.model.GlobalUnit;
+import org.cgiar.ccafs.marlo.data.model.User;
+import org.cgiar.ccafs.marlo.logging.ErrorNotificationThrottle;
+import org.cgiar.ccafs.marlo.logging.LogContext;
 import org.cgiar.ccafs.marlo.utils.APConfig;
 import org.cgiar.ccafs.marlo.utils.SendMailS;
 
@@ -27,6 +30,7 @@ import java.util.TreeSet;
 
 import javax.inject.Inject;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import org.apache.catalina.connector.ClientAbortException;
 import org.slf4j.Logger;
@@ -52,7 +56,14 @@ public class UnhandledExceptionAction extends BaseAction {
 
   @Override
   public String execute() throws Exception {
-    // Print the exception in the log
+    // Print the exception in the log. The page is rendered with HTTP 200, but the request failed as a 500; a client
+    // that closed the connection received nothing, so it gets no status, not even the 401/403/404 of the page that was
+    // being written when the connection closed.
+    if (exception instanceof ClientAbortException) {
+      LogContext.removeStatusCode();
+    } else {
+      LogContext.putStatusCode(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+    }
     LOG.error("There was an unexpected exception", exception);
 
     if (this.isAiccra()) {
@@ -76,6 +87,11 @@ public class UnhandledExceptionAction extends BaseAction {
     return this.request;
   }
 
+  /**
+   * Emails the exception to the support team, unless the same error was already emailed within the hour (see
+   * ErrorNotificationThrottle). The email carries the request id and status of the failed request, so that it can be
+   * matched with its lines in the log.
+   */
   public void sendExceptionMessage() {
     String subject;
     StringBuilder message = new StringBuilder();
@@ -85,27 +101,44 @@ public class UnhandledExceptionAction extends BaseAction {
       exception = new Exception("MARLOCustomPersistFilter ERROR!");
     }
 
-    Exception e = (Exception) request.getSession().getAttribute("exception");
-    if (e != null) {
-      exception = e;
+    if (request != null && request.getSession(false) != null) {
+      Exception e = (Exception) request.getSession(false).getAttribute("exception");
+      if (e != null) {
+        exception = e;
+      }
+      request.getSession(false).setAttribute("exception", null);
     }
-    request.getSession().setAttribute("exception", null);
+
+    int suppressedRepeats = ErrorNotificationThrottle.shared()
+      .register(ErrorNotificationThrottle.key(LogContext.get(LogContext.TOOL_NAME),
+        LogContext.get(LogContext.CONTROLLER_AFFECTED), exception, LogContext.get(LogContext.STATUS_CODE)));
+    if (suppressedRepeats == ErrorNotificationThrottle.SUPPRESSED) {
+      LOG.info("sendExceptionMessage() > The same exception was already reported within the hour; no email sent.");
+      return;
+    }
+
     exception.printStackTrace(new PrintWriter(writer));
 
 
     GlobalUnit crp = this.getCurrentCrp();
 
-    String globalUnitName = crp.getAcronym() != null && !crp.getAcronym().isEmpty() ? crp.getAcronym()
-      : crp.getName() != null ? crp.getName() : "MARLO";
+    String globalUnitName = "MARLO";
+    if (crp != null) {
+      globalUnitName = crp.getAcronym() != null && !crp.getAcronym().isEmpty() ? crp.getAcronym()
+        : crp.getName() != null ? crp.getName() : "MARLO";
+    }
     subject = "Exception occurred in " + globalUnitName;
 
-    message.append("The user " + this.getCurrentUser().getFirstName() + " " + this.getCurrentUser().getLastName() + " ("
-      + this.getCurrentUser().getEmail() + ") ");
+    User user = this.getCurrentUser();
+    if (user != null) {
+      message.append("The user " + user.getFirstName() + " " + user.getLastName() + " (" + user.getEmail() + ") ");
+    } else {
+      message.append("A user who was not logged in ");
+    }
     message.append("has experienced an exception on the platform. </br>");
     message.append("This exception occurs in the server: " + config.getBaseUrl() + "</br></br>");
-    String crpAcronymName = crp.getAcronym() != null && !crp.getAcronym().isEmpty() ? crp.getAcronym()
-      : crp.getName() != null ? crp.getName() : "MARLO";
-    message.append("<b>Global Unit: </b>" + crpAcronymName + ".</br>");
+    message.append("<b>Global Unit: </b>" + globalUnitName + ".</br>");
+    message.append(ErrorNotificationThrottle.correlationHtml(suppressedRepeats));
     if (this.getActualPhase() != null) {
       message.append("<b>Phase: </b>" + this.getActualPhase().getComposedName() + ".</br>");
     }
@@ -126,9 +159,8 @@ public class UnhandledExceptionAction extends BaseAction {
       actionNameSubject += " - " + this.getActualPhase().getComposedName();
     }
 
-    if (this.getCurrentUser() != null && this.getCurrentUser().getFirstName() != null
-      && this.getCurrentUser().getLastName() != null) {
-      actionNameSubject += " - " + this.getCurrentUser().getFirstName() + " " + this.getCurrentUser().getLastName();
+    if (user != null && user.getFirstName() != null && user.getLastName() != null) {
+      actionNameSubject += " - " + user.getFirstName() + " " + user.getLastName();
     }
     subject += actionNameSubject;
 
@@ -158,8 +190,7 @@ public class UnhandledExceptionAction extends BaseAction {
 
     sendMail.send(config.getEmailNotification(), null, config.getEmailNotification(), subject, message.toString(), null,
       null, null, true);
-    LOG.info("sendExceptionMessage() > The platform has sent a message reporting a exception.",
-      this.getCurrentUser().getEmail());
+    LOG.info("sendExceptionMessage() > The platform has sent a message reporting a exception.");
   }
 
   public void setException(Exception exception) {
