@@ -64,7 +64,6 @@ import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.inject.Named;
 
-import org.jfree.util.Log;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -593,7 +592,7 @@ public class DeliverableValidator extends BaseValidator {
                         indicator.getCrpProgramOutcome().setAcronym(outcome.getAcronym());
                       }
                     } catch (Exception e) {
-                      Log.error("error getting crp program outcome " + e);
+                      LOG.warn("Could not get the CRP program outcome of a deliverable indicator: {}", e.toString());
                     }
                   }
                   if (soilIndicator != null && soilIndicator.getIndicatorName() != null && indicator != null
@@ -937,21 +936,6 @@ public class DeliverableValidator extends BaseValidator {
         InvalidFieldsMessages.EMPTYFIELD);
     }
 
-
-    /*
-     * if (deliverable.getDeliverableInfo(action.getActualPhase()) != null
-     * && deliverable.getDeliverableInfo(action.getActualPhase()).getCrpProgramOutcome() != null
-     * && deliverable.getDeliverableInfo(action.getActualPhase()).getCrpProgramOutcome().getId() != null
-     * && deliverable.getDeliverableInfo(action.getActualPhase()).getCrpProgramOutcome().getId() == -1) {
-     * if (action.isAiccra()) {
-     * action.addMessage(action.getText("project.deliverable.generalInformation.keyOutput"));
-     * action.getInvalidFields().put("input-deliverable.deliverableInfo.crpProgramOutcome.id",
-     * InvalidFieldsMessages.EMPTYFIELD);
-     * }
-     * deliverable.getDeliverableInfo(action.getActualPhase()).setCrpProgramOutcome(null);
-     * }
-     */
-
     if (project != null && project.getProjecInfoPhase(action.getActualPhase()).getAdministrative() != null
       && project.getProjecInfoPhase(action.getActualPhase()).getAdministrative().booleanValue() == false) {
       if (deliverable.getCrpOutcomes() == null || deliverable.getCrpOutcomes().isEmpty()) {
@@ -974,23 +958,9 @@ public class DeliverableValidator extends BaseValidator {
         if (deliverable.getDeliverableInfo(action.getActualPhase()).getCrpClusterKeyOutput() != null
           && deliverable.getDeliverableInfo(action.getActualPhase()).getCrpClusterKeyOutput().getId() != null) {
           if (deliverable.getDeliverableInfo(action.getActualPhase()).getCrpClusterKeyOutput().getId() == -1) {
-
-            if (!action.isAiccra()) {
-              action.addMessage(action.getText("project.deliverable.generalInformation.keyOutput"));
-              action.getInvalidFields().put("input-deliverable.deliverableInfo.crpClusterKeyOutput.id",
-                InvalidFieldsMessages.EMPTYFIELD);
-            }
-
             deliverable.getDeliverableInfo(action.getActualPhase()).setCrpClusterKeyOutput(null);
-
           }
         } else {
-
-          if (!action.isAiccra()) {
-            action.addMessage(action.getText("project.deliverable.generalInformation.keyOutput"));
-            action.getInvalidFields().put("input-deliverable.deliverableInfo.crpClusterKeyOutput.id",
-              InvalidFieldsMessages.EMPTYFIELD);
-          }
           deliverable.getDeliverableInfo(action.getActualPhase()).setCrpClusterKeyOutput(null);
         }
       }

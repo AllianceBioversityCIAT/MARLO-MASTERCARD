@@ -66,6 +66,7 @@ import org.cgiar.ccafs.marlo.rest.mappers.MeliaMapper;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -75,11 +76,15 @@ import javax.inject.Inject;
 import javax.inject.Named;
 
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 @Named
 public class ExpectedStudiesOtherItem<T> {
+
+  private static final Logger LOG = LoggerFactory.getLogger(ExpectedStudiesOtherItem.class);
 
   private PhaseManager phaseManager;
   private GlobalUnitManager globalUnitManager;
@@ -520,7 +525,7 @@ public class ExpectedStudiesOtherItem<T> {
     }
     if (!fieldErrors.isEmpty()) {
       for (FieldErrorDTO errors : fieldErrors) {
-        System.out.println("FieldErrorDTO " + errors.getMessage());
+        LOG.debug("Field validation error: {}", errors == null ? null : errors.getMessage());
       }
 
       throw new MARLOFieldValidationException("Field Validation errors", "",
@@ -750,7 +755,7 @@ public class ExpectedStudiesOtherItem<T> {
     }
 
     if (!fieldErrors.isEmpty()) {
-      fieldErrors.forEach(e -> System.out.println(e.getMessage()));
+      fieldErrors.forEach(e -> LOG.debug("Field validation error: {}", e == null ? null : e.getMessage()));
       throw new MARLOFieldValidationException("Field Validation errors", "",
         fieldErrors.stream()
           .sorted(Comparator.comparing(FieldErrorDTO::getField, Comparator.nullsLast(Comparator.naturalOrder())))
@@ -1054,6 +1059,9 @@ public class ExpectedStudiesOtherItem<T> {
           projectExpectedStudy.setPhase(phase.getId());
           projectExpectedStudy.setYear(phase.getYear());
           projectExpectedStudy.setProject(project);
+          // activeSince is the last modification date: a new value makes the update happen even when only child
+          // rows changed.
+          projectExpectedStudy.setActiveSince(new Date());
           ProjectExpectedStudy projectExpectedStudyDB =
             projectExpectedStudyManager.saveProjectExpectedStudy(projectExpectedStudy);
           if (projectExpectedStudyDB != null) {

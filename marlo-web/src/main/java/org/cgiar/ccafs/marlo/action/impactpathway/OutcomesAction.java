@@ -87,7 +87,6 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.ibm.icu.util.Calendar;
-import com.ibm.icu.util.GregorianCalendar;
 import com.opensymphony.xwork2.util.CreateIfNull;
 import com.opensymphony.xwork2.util.Element;
 import com.opensymphony.xwork2.util.KeyProperty;
@@ -109,8 +108,9 @@ public class OutcomesAction extends BaseAction {
   private static final Logger LOG = LoggerFactory.getLogger(OutcomesAction.class);
 
 
-  // FIXME remove this variable. create an specificity for each crp/platform
-  private static final Integer END_YEAR = 2030;
+  // The years every unit can pick in the year selects; widen them when a program runs past the last one
+  private static final int FIRST_TARGET_YEAR = 2021;
+  private static final int LAST_TARGET_YEAR = 2031;
 
 
   private AuditLogManager auditLogManager;
@@ -392,44 +392,16 @@ public class OutcomesAction extends BaseAction {
     return targetUnitList;
   }
 
+  /**
+   * The years offered in the year selects of the indicators and their period targets.
+   *
+   * @return the years 2021 to 2031, in order
+   */
   public List<Integer> getTargetYears() {
     List<Integer> targetYears = new ArrayList<>();
-
-    Date date = new Date();
-
-    Calendar calendarStart = new GregorianCalendar(2017, 0, 10, 01, 10, 30);
-
-    Calendar calendarEnd = Calendar.getInstance();
-    calendarEnd.set(Calendar.YEAR, END_YEAR);
-
-    if (this.isAiccra()) {
-
-      // Adding the year to the list.
-      targetYears.add(2021);
-      targetYears.add(2022);
-      targetYears.add(2023);
-      targetYears.add(2024);
-      targetYears.add(2025);
-      targetYears.add(2026);
-      targetYears.add(2027);
-      targetYears.add(2028);
-      targetYears.add(2029);
-      targetYears.add(2030);
-      targetYears.add(2031);
-
-    } else {
-      while (calendarStart.get(Calendar.YEAR) <= calendarEnd.get(Calendar.YEAR)) {
-
-        // Adding the year to the list.
-        // if (calendarStart.get(Calendar.YEAR) >= this.getActualPhase().getYear()) {
-        targetYears.add(calendarStart.get(Calendar.YEAR));
-        // }
-
-        // Adding a year (365 days) to the start date.
-        calendarStart.add(Calendar.YEAR, 1);
-      }
+    for (int year = FIRST_TARGET_YEAR; year <= LAST_TARGET_YEAR; year++) {
+      targetYears.add(year);
     }
-
     return targetYears;
   }
 
@@ -603,7 +575,7 @@ public class OutcomesAction extends BaseAction {
                           mile.setYear(y);
                       } catch (NumberFormatException e) {
                           // Log a warning if the year format is invalid instead of silently ignoring it
-                          LOG.warn("Formato de año inválido para milestone " + j + ": " + yearRaw);
+                          LOG.warn("Invalid year format for milestone {}: {}", j, yearRaw);
                       }
                   }
                   currentOutcome.getMilestones().add(mile);
@@ -1419,11 +1391,18 @@ public class OutcomesAction extends BaseAction {
         // A milestone submitted without its unit (partial binding) must not NPE
         Long unitId =
           incomingMilestone.getSrfTargetUnit() != null ? incomingMilestone.getSrfTargetUnit().getId() : null;
+        // Resolved onto the incoming milestone, like the lookups above: copyFields() below copies
+        // srfTargetUnit from it, so a raw form id (-1 or unknown) would otherwise reach the insert
+        // and fail the target_unit_id foreign key
         if (unitId != null && unitId != -1) {
-            SrfTargetUnit unit = srfTargetUnitManager.getSrfTargetUnitById(unitId);
-            milestone.setSrfTargetUnit(unit); // Reemplaza el objeto completo
+          SrfTargetUnit unit = srfTargetUnitManager.getSrfTargetUnitById(unitId);
+          if (unit == null) {
+            LOG.warn("Target unit {} does not exist, so milestone {} is saved without a unit", unitId,
+              incomingMilestone.getComposeID());
+          }
+          incomingMilestone.setSrfTargetUnit(unit);
         } else {
-            milestone.setSrfTargetUnit(null);
+          incomingMilestone.setSrfTargetUnit(null);
         }
 
         // copyFields() copies nulls and `milestone` is the row loaded from the DB, so any

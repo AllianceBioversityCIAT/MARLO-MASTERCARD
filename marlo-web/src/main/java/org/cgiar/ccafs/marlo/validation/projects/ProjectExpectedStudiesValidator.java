@@ -36,7 +36,6 @@ import org.cgiar.ccafs.marlo.data.model.ProjectExpectedStudyLink;
 import org.cgiar.ccafs.marlo.data.model.ProjectExpectedStudyPartnership;
 import org.cgiar.ccafs.marlo.data.model.ProjectExpectedStudyQuantification;
 import org.cgiar.ccafs.marlo.data.model.ProjectExpectedStudyReference;
-import org.cgiar.ccafs.marlo.data.model.ProjectExpectedStudySubIdo;
 import org.cgiar.ccafs.marlo.data.model.ProjectSectionStatusEnum;
 import org.cgiar.ccafs.marlo.data.model.ProjectStatusEnum;
 import org.cgiar.ccafs.marlo.data.model.SDGContribution;
@@ -56,7 +55,6 @@ import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.inject.Named;
 
-import org.jfree.util.Log;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -394,26 +392,6 @@ public class ProjectExpectedStudiesValidator extends BaseValidator {
           }
           allianceLeverIndex++;
         }
-
-        // If no alliance lever was selected, mark as missing
-        if (!isAllianceLeverSelected && !action.isAiccra()) {
-
-          for (int i = 0; i < allianceLeverSize; i++) {
-            action.getInvalidFields().put("input-expectedStudy.allianceLevers[" + i + "].id",
-              InvalidFieldsMessages.EMPTYFIELD);
-          }
-          action.addMessage(this.getTextCustom(action, "expectedStudy.allianceLevers"));
-
-        }
-      } else {
-        if (!action.isAiccra()) {
-          action.addMessage(this.getTextCustom(action, "expectedStudy.allianceLevers"));
-          // If the alliance levers list is null or empty, mark as missing
-          for (int i = 0; i < allianceLeverSize; i++) {
-            action.getInvalidFields().put("input-expectedStudy.allianceLevers[" + i + "].id",
-              InvalidFieldsMessages.EMPTYFIELD);
-          }
-        }
       }
     }
 
@@ -653,27 +631,6 @@ public class ProjectExpectedStudiesValidator extends BaseValidator {
       }
     }
 
-    if (!action.isPOWB() && !action.isAiccra()) {
-
-      if (baseAction.isReportingActive() || baseAction.isUpKeepActive()) {
-        if (projectExpectedStudy.getProjectExpectedStudyInfo(baseAction.getActualPhase()).getStudyType() != null
-          && projectExpectedStudy.getProjectExpectedStudyInfo(baseAction.getActualPhase()).getStudyType()
-            .getId() == 1) {
-
-          if (!resultProgessValidate) {
-            // Validate Contacts
-            if (!this.isValidString(
-              projectExpectedStudy.getProjectExpectedStudyInfo(baseAction.getActualPhase()).getContacts())) {
-              action.addMessage(this.getTextCustom(action, "Contacts"));
-              action.getInvalidFields().put("input-expectedStudy.projectExpectedStudyInfo.contacts",
-                InvalidFieldsMessages.EMPTYFIELD);
-            }
-          }
-
-        }
-      }
-    }
-
     // Validate publications
     /*
      * int index = 0;
@@ -797,32 +754,6 @@ public class ProjectExpectedStudiesValidator extends BaseValidator {
 
     if (!action.isPOWB()) {
       // Not AWPB phase - just for reporting and progress
-      // Validate Sub-Idos
-      if (!action.isAiccra()) {
-        if (projectExpectedStudy.getSubIdos() == null || projectExpectedStudy.getSubIdos().isEmpty()) {
-          action.addMessage(this.getTextCustom(action, "subIdos"));
-          action.getInvalidFields().put("list-expectedStudy.subIdos",
-            action.getText(InvalidFieldsMessages.EMPTYLIST, new String[] {"subIdos"}));
-        } else {
-          // Validate primary sub-IDO
-          if (projectExpectedStudy.getSubIdos().size() > 1) {
-            int count = 0;
-            for (ProjectExpectedStudySubIdo studySubIdo : projectExpectedStudy.getSubIdos()) {
-              if (studySubIdo.getPrimary() != null && studySubIdo.getPrimary()) {
-                count++;
-              }
-            }
-
-            if (count == 0) {
-              action.addMessage(this.getTextCustom(action, "subIdos"));
-              action.getInvalidFields().put("list-expectedStudy.subIdos",
-                action.getText(InvalidFieldsMessages.EMPTYLIST, new String[] {"subIdos"}));
-            }
-          }
-        }
-      }
-
-
       if (!resultProgessValidate) {
         // validate Milestones
         if (projectExpectedStudy.getProjectExpectedStudyInfo(baseAction.getActualPhase()) != null
@@ -957,17 +888,6 @@ public class ProjectExpectedStudiesValidator extends BaseValidator {
 
         // Validate References Cited - Mandatory in reporting and progress phases
         this.validateReferencesCited(projectExpectedStudy, action, true);
-
-        if (!resultProgessValidate && !action.isAiccra()) {
-          // Validate Contacts
-          if (!this.isValidString(
-            projectExpectedStudy.getProjectExpectedStudyInfo(baseAction.getActualPhase()).getContacts())) {
-            action.addMessage(this.getTextCustom(action, "Contacts"));
-            action.getInvalidFields().put("input-expectedStudy.projectExpectedStudyInfo.contacts",
-              InvalidFieldsMessages.EMPTYFIELD);
-          }
-        }
-
 
         // Validate Gender Radio Button
         if (projectExpectedStudy.getProjectExpectedStudyInfo(baseAction.getActualPhase()).getGenderLevel() == null) {
@@ -1166,8 +1086,10 @@ public class ProjectExpectedStudiesValidator extends BaseValidator {
         InvalidFieldsMessages.EMPTYFIELD);
     }
     // Validate Type of Quantification
+    // A type that arrives without an id is as empty as the -1 placeholder; comparing a null id with -1 threw
     if (projectExpectedStudyQuantification.getQuantificationType() != null
-      && projectExpectedStudyQuantification.getQuantificationType().getId() == -1) {
+      && (projectExpectedStudyQuantification.getQuantificationType().getId() == null
+        || projectExpectedStudyQuantification.getQuantificationType().getId() == -1)) {
       action.addMessage(this.getTextCustom(action, "Type Quantification"));
       action.getInvalidFields().put("input-expectedStudy.quantifications[" + i + "].quantificationType.id",
         InvalidFieldsMessages.EMPTYFIELD);
@@ -1181,7 +1103,7 @@ public class ProjectExpectedStudiesValidator extends BaseValidator {
           InvalidFieldsMessages.EMPTYFIELD);
       }
     } catch (Exception e) {
-      Log.error("error getting quantification number");
+      LOG.warn("Could not validate the quantification number: {}", e.toString());
     }
 
     // Validate cero Number
@@ -1193,7 +1115,7 @@ public class ProjectExpectedStudiesValidator extends BaseValidator {
           InvalidFieldsMessages.EMPTYFIELD);
       }
     } catch (Exception e) {
-      Log.error("error getting quantification number");
+      LOG.warn("Could not validate the quantification number: {}", e.toString());
     }
 
     // Validate Unit

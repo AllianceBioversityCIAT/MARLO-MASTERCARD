@@ -491,9 +491,8 @@ public class ProjectActivitiesSummaryAction extends BaseSummariesAction implemen
     }
     // Calculate time to generate report
     startTime = System.currentTimeMillis();
-    LOG.info(
-      "Start report download: " + this.getFileName() + ". User: " + this.getCurrentUser().getComposedCompleteName()
-        + ". CRP: " + this.getLoggedCrp().getAcronym() + ". Cycle: " + this.getSelectedCycle());
+    LOG.info("Start report download: {}. CRP: {}. Cycle: {}", this.getFileName(),
+      this.getLoggedCrp() != null ? this.getLoggedCrp().getAcronym() : null, this.getSelectedCycle());
 
     try (ByteArrayOutputStream os = new ByteArrayOutputStream()) {
       String masterQueryName = "Main_Query";
@@ -578,9 +577,8 @@ public class ProjectActivitiesSummaryAction extends BaseSummariesAction implemen
     // Calculate time of generation
     long stopTime = System.currentTimeMillis();
     stopTime = stopTime - startTime;
-    LOG.info("Downloaded successfully: " + this.getFileName() + ". User: "
-      + this.getCurrentUser().getComposedCompleteName() + ". CRP: " + this.getLoggedCrp().getAcronym() + ". Cycle: "
-      + this.getSelectedCycle() + ". Time to generate: " + stopTime + "ms.");
+    LOG.info("Downloaded successfully: {}. CRP: {}. Cycle: {}. Time to generate: {}ms.", this.getFileName(),
+      this.getLoggedCrp() != null ? this.getLoggedCrp().getAcronym() : null, this.getSelectedCycle(), stopTime);
     return SUCCESS;
   }
 
@@ -1719,6 +1717,9 @@ public class ProjectActivitiesSummaryAction extends BaseSummariesAction implemen
       this
         .setProjectID(Long.parseLong(StringUtils.trim(this.getRequest().getParameter(APConstants.PROJECT_REQUEST_ID))));
       this.setCrpSession(this.getLoggedCrp().getAcronym());
+    } catch (NumberFormatException e) {
+      // A missing or non-numeric projectID is a bad request, not a failure: execute() answers it as not found
+      LOG.warn("The {} parameter is missing or not a number: {}", APConstants.PROJECT_REQUEST_ID, e.getMessage());
     } catch (Exception e) {
       LOG.error("Failed to get " + APConstants.PROJECT_REQUEST_ID + " parameter. Exception: " + e.getMessage());
     }

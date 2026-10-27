@@ -181,6 +181,7 @@ public class DeliverablesItem<T> {
       deliverable.setCrp(globalUnitEntity);
       deliverable.setPhase(phase);
       deliverable.setIsPublication(true);
+      deliverable.setCreateDate(new Date());
       // save deliverables
       deliverable = deliverableManager.saveDeliverable(deliverable);
       deliverablesID = deliverable.getId();
@@ -335,7 +336,7 @@ public class DeliverablesItem<T> {
           try {
             JsonElement json = this.getServiceWOS(
               "http://clarisa.wos.api.mel.cgiar.org/?link=" + DOIService.tryGetDoiName(deliverableDTO.getDoi()));
-            System.out.println(json.toString());
+            LOG.debug("WOS response: {}", json);
 
             PublicationWOS publication = new Gson().fromJson(json, PublicationWOS.class);
             if (publication != null) {
@@ -522,7 +523,7 @@ public class DeliverablesItem<T> {
               }
             }
           } catch (Exception e) {
-            e.printStackTrace();
+            LOG.error("Could not store the WOS metadata of the deliverable", e);
           }
         }
 
@@ -577,6 +578,7 @@ public class DeliverablesItem<T> {
       deliverable.setCrp(globalUnitEntity);
       deliverable.setPhase(phase);
       deliverable.setIsPublication(true);
+      deliverable.setCreateDate(new Date());
       deliverable = deliverableManager.saveDeliverable(deliverable);
       deliverablesID = deliverable.getId();
       if (deliverablesID != null) {
@@ -709,7 +711,7 @@ public class DeliverablesItem<T> {
           try {
             JsonElement json = this.getServiceWOS(
               "http://clarisa.wos.api.mel.cgiar.org/?link=" + DOIService.tryGetDoiName(deliverableDTO.getDoi()));
-            System.out.println(json.toString());
+            LOG.debug("WOS response: {}", json);
 
             PublicationWOS publication = new Gson().fromJson(json, PublicationWOS.class);
             if (publication != null) {
@@ -894,7 +896,7 @@ public class DeliverablesItem<T> {
               }
             }
           } catch (Exception e) {
-            e.printStackTrace();
+            LOG.error("Could not store the WOS metadata of the deliverable", e);
           }
         }
       }
@@ -976,7 +978,7 @@ public class DeliverablesItem<T> {
     }
 
     if (!fieldErrors.isEmpty()) {
-      fieldErrors.forEach(e -> System.out.println(e.getMessage()));
+      fieldErrors.forEach(e -> LOG.debug("Field validation error: {}", e == null ? null : e.getMessage()));
       throw new MARLOFieldValidationException("Field Validation errors", "",
         fieldErrors.stream()
           .sorted(Comparator.comparing(FieldErrorDTO::getField, Comparator.nullsLast(Comparator.naturalOrder())))
@@ -1056,7 +1058,6 @@ public class DeliverablesItem<T> {
 
     // Validate all fields
     if (!fieldErrors.isEmpty()) {
-      // fieldErrors.forEach(e -> System.out.println(e.getMessage()));
       throw new MARLOFieldValidationException("Field Validation errors", "",
         fieldErrors.stream()
           .sorted(Comparator.comparing(FieldErrorDTO::getField, Comparator.nullsLast(Comparator.naturalOrder())))
@@ -1198,7 +1199,7 @@ public class DeliverablesItem<T> {
 
 
       } catch (Exception e) {
-        e.printStackTrace();
+        LOG.error("Could not create the deliverable", e);
         fieldErrors.add(new FieldErrorDTO("createDeliverable", "Deliverable", "ERROR Creating info"));
         throw new MARLOFieldValidationException("Field Validation errors", "",
           fieldErrors.stream()
@@ -1317,6 +1318,9 @@ public class DeliverablesItem<T> {
       deliverable.setCrp(globalUnitEntity);
       deliverable.setPhase(phase);
       deliverable.setIsPublication(true);
+      // activeSince is the last modification date: a new value makes the update happen even when only child
+      // rows changed.
+      deliverable.setActiveSince(new Date());
       // save deliverables
       deliverable = deliverableManager.saveDeliverable(deliverable);
       idDeliverableDB = deliverable.getId();
@@ -1490,7 +1494,7 @@ public class DeliverablesItem<T> {
           try {
             JsonElement json = this.getServiceWOS(
               "http://clarisa.wos.api.mel.cgiar.org/?link=" + DOIService.tryGetDoiName(newPublicationDTO.getDoi()));
-            System.out.println(json.toString());
+            LOG.debug("WOS response: {}", json);
 
             PublicationWOS publication = new Gson().fromJson(json, PublicationWOS.class);
             if (publication != null) {
@@ -1747,7 +1751,7 @@ public class DeliverablesItem<T> {
 
             }
           } catch (Exception e) {
-            e.printStackTrace();
+            LOG.error("Could not store the WOS metadata of the deliverable", e);
           }
         }
 
@@ -1851,6 +1855,9 @@ public class DeliverablesItem<T> {
       deliverable.setCrp(globalUnitEntity);
       deliverable.setPhase(phase);
       deliverable.setIsPublication(true);
+      // activeSince is the last modification date: a new value makes the update happen even when only child
+      // rows changed.
+      deliverable.setActiveSince(new Date());
       // save deliverables
       deliverable = deliverableManager.saveDeliverable(deliverable);
       idDeliverableDB = deliverable.getId();
@@ -1986,7 +1993,7 @@ public class DeliverablesItem<T> {
           try {
             JsonElement json = this.getServiceWOS(
               "http://clarisa.wos.api.mel.cgiar.org/?link=" + DOIService.tryGetDoiName(newPublicationDTO.getDoi()));
-            System.out.println(json.toString());
+            LOG.debug("WOS response: {}", json);
 
             PublicationWOS publication = new Gson().fromJson(json, PublicationWOS.class);
             if (publication != null) {
@@ -2240,7 +2247,7 @@ public class DeliverablesItem<T> {
               }
             }
           } catch (Exception e) {
-            e.printStackTrace();
+            LOG.error("Could not store the WOS metadata of the deliverable", e);
           }
         }
 

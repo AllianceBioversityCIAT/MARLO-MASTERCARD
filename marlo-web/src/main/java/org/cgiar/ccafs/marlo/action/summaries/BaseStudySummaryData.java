@@ -27,7 +27,6 @@ import org.cgiar.ccafs.marlo.data.manager.ReportConfigurationManager;
 import org.cgiar.ccafs.marlo.data.model.ExpectedStudyProject;
 import org.cgiar.ccafs.marlo.data.model.ImpactArea;
 import org.cgiar.ccafs.marlo.data.model.Institution;
-import org.cgiar.ccafs.marlo.data.model.InstitutionLocation;
 import org.cgiar.ccafs.marlo.data.model.InstitutionType;
 import org.cgiar.ccafs.marlo.data.model.LocElement;
 import org.cgiar.ccafs.marlo.data.model.Phase;
@@ -55,6 +54,7 @@ import org.cgiar.ccafs.marlo.data.model.ProjectExpectedStudyRegion;
 import org.cgiar.ccafs.marlo.data.model.ProjectExpectedStudySdgAllianceLever;
 import org.cgiar.ccafs.marlo.data.model.ProjectExpectedStudySrfTarget;
 import org.cgiar.ccafs.marlo.data.model.ProjectExpectedStudySubIdo;
+import org.cgiar.ccafs.marlo.data.model.ProjectPartnerPerson;
 import org.cgiar.ccafs.marlo.data.model.ReportConfiguration;
 import org.cgiar.ccafs.marlo.data.model.User;
 import org.cgiar.ccafs.marlo.utils.APConfig;
@@ -89,7 +89,6 @@ import java.util.stream.Collectors;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import org.jfree.util.Log;
 import org.pentaho.reporting.engine.classic.core.MasterReport;
 import org.pentaho.reporting.engine.classic.core.util.TypedTableModel;
 import org.slf4j.Logger;
@@ -991,10 +990,13 @@ public class BaseStudySummaryData extends BaseSummariesAction {
 
         // Lead Person
         try {
-          leadPerson = projectExpectedStudy.getProject().getLeaderPerson(this.getActualPhase()).getUser()
-            .getComposedNameWithoutEmail();
+          final ProjectPartnerPerson leader =
+            projectExpectedStudy.getProject().getLeaderPerson(this.getActualPhase());
+          if ((leader != null) && (leader.getUser() != null)) {
+            leadPerson = leader.getUser().getComposedNameWithoutEmail();
+          }
         } catch (Exception e) {
-          Log.error("error getting leader " + e);
+          LOG.debug("Could not get the leader of the study project: {}", e.toString());
         }
 
         // Is Alliance Contribution
@@ -1253,7 +1255,7 @@ public class BaseStudySummaryData extends BaseSummariesAction {
           }
 
         } catch (Exception e) {
-          Log.error("Unexpected error while getting Impact Areas", e);
+          LOG.error("Unexpected error while getting Impact Areas", e);
         }
 
         /*
@@ -1785,11 +1787,16 @@ public class BaseStudySummaryData extends BaseSummariesAction {
         }
         // Centers(s)
         final List<ProjectExpectedStudyCenter> studyCenters = projectExpectedStudy.getProjectExpectedStudyCenters()
-          .stream().filter(c -> c.isActive() && (c.getPhase() != null) && c.getPhase().equals(this.getSelectedPhase()))
+          .stream().filter(c -> (c != null) && c.isActive() && (c.getPhase() != null)
+            && c.getPhase().equals(this.getSelectedPhase()))
           .collect(Collectors.toList());
         if ((studyCenters != null) && !studyCenters.isEmpty()) {
           final Set<String> centersSet = new HashSet<>();
           for (final ProjectExpectedStudyCenter projectExpectedStudyCenter : studyCenters) {
+            // A center without an institution has nothing to list, and reading it outside any try stopped the report
+            if (projectExpectedStudyCenter.getInstitution() == null) {
+              continue;
+            }
 
             final String institutionType =
               Optional.ofNullable(projectExpectedStudyCenter.getInstitution().getInstitutionType())
@@ -1797,15 +1804,12 @@ public class BaseStudySummaryData extends BaseSummariesAction {
             try {
               projectExpectedStudyCenter.getInstitution().setLocations(projectExpectedStudyCenter.getInstitution()
                 .getInstitutionsLocations().stream().filter(c -> c.isActive()).collect(Collectors.toList()));
-              projectExpectedStudyCenter.getInstitution().getLocations()
-                .addAll(projectExpectedStudyCenter.getInstitution().getInstitutionsLocations().stream()
-                  .filter(InstitutionLocation::isActive).collect(Collectors.toList()));
             } catch (final Exception e) {
-              Log.error("Error setting locations " + e);
+              LOG.debug("Could not set the locations of a study center: {}", e.toString());
             }
             final String headquarter = Optional.ofNullable(projectExpectedStudyCenter.getInstitution().getLocations())
               .flatMap(locations -> locations.stream()
-                .filter(location -> location.isHeadquater() && (location.getLocElement() != null)
+                .filter(location -> (location != null) && location.isHeadquater() && (location.getLocElement() != null)
                   && (location.getLocElement().getName() != null))
                 .map(location -> " | headquarter: " + location.getLocElement().getName()).findFirst())
               .orElse("");
@@ -2170,7 +2174,7 @@ public class BaseStudySummaryData extends BaseSummariesAction {
             projectExpectedStudy.setSdgAllianceLevers(null);
           }
         } catch (final Exception e) {
-          Log.error("error getting primary alliance lever");
+          LOG.debug("Could not get the primary alliance lever: {}", e.toString());
         }
 
         // Primary SDG contribution
@@ -2217,7 +2221,7 @@ public class BaseStudySummaryData extends BaseSummariesAction {
             }
           }
         } catch (final Exception e) {
-          Log.error("error getting primary alliance lever");
+          LOG.debug("Could not get the primary alliance lever: {}", e.toString());
         }
 
 
@@ -2291,9 +2295,9 @@ public class BaseStudySummaryData extends BaseSummariesAction {
             + (globalTargetsResult.isEmpty() ? "" : globalTargetsResult);
 
         } catch (final NullPointerException e) {
-          Log.error("NullPointerException while getting Impact Areas", e);
+          LOG.error("NullPointerException while getting Impact Areas", e);
         } catch (final Exception e) {
-          Log.error("Unexpected error while getting Impact Areas", e);
+          LOG.error("Unexpected error while getting Impact Areas", e);
         }
 
         /*
@@ -2519,7 +2523,7 @@ public class BaseStudySummaryData extends BaseSummariesAction {
           }
         }
       } catch (final Exception e) {
-        Log.error("error in isAllianceSelected " + e);
+        LOG.debug("Could not check the Alliance center selection: {}", e.toString());
       }
     }
     return false;
