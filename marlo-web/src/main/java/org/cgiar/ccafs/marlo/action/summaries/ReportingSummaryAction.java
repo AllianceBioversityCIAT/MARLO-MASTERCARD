@@ -73,7 +73,6 @@ import org.cgiar.ccafs.marlo.utils.URLShortener;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
@@ -1386,9 +1385,8 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
     // Calculate time of generation
     long stopTime = System.currentTimeMillis();
     stopTime = stopTime - startTime;
-    LOG.info("Downloaded successfully: " + this.getFileName() + ". User: "
-      + this.getCurrentUser().getComposedCompleteName() + ". CRP: " + this.getLoggedCrp().getAcronym() + ". Cycle: "
-      + this.getSelectedCycle() + ". Time to generate: " + stopTime + "ms.");
+    LOG.info("Downloaded successfully: {}. CRP: {}. Cycle: {}. Time to generate: {}ms.", this.getFileName(),
+      this.getLoggedCrp() != null ? this.getLoggedCrp().getAcronym() : null, this.getSelectedCycle(), stopTime);
   } else {
     // Specificity false - use microservice for report generation
     try {
@@ -1396,16 +1394,17 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
       bytesPDF = os.toByteArray();
     } catch (Exception e) {
       if (e.getClass().getName().contains("ClientAbortException")) {
-        System.out.println("Client aborted the connection: " + e.getMessage());
+        LOG.debug("Client aborted the connection: {}", e.toString());
       } else {
-        System.out.println("Exception while generating JSON: " + e.getMessage());
+        // Rethrown and logged where it is handled; this only marks where it happened
+        LOG.debug("Exception while generating the reporting summary JSON: {}", e.toString());
         throw e;
       }
     } finally {
       try {
         os.close();
       } catch (Exception e) {
-        System.out.println("Error closing output stream: " + e.getMessage());
+        LOG.debug("Could not close the output stream: {}", e.toString());
       }
     }
   }
@@ -2915,7 +2914,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
             }
           }
         } catch (Exception e) {
-          e.printStackTrace();
+          LOG.warn("Could not read the CRP outcomes of a deliverable: {}", e.toString());
         }
 
         // Deliverable Cluster participants
@@ -3197,7 +3196,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
                 .collect(Collectors.toList()).get(0);
             }
           } catch (Exception e) {
-            LOG.error("Error getting Deliverable Disseminations: " + e.getMessage());
+            LOG.error("Error getting Deliverable Disseminations", e);
           }
           if (deliverableDissemination != null && deliverableDissemination.getAlreadyDisseminated() != null
             && deliverableDissemination.getAlreadyDisseminated() == true) {
@@ -3219,7 +3218,6 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
           if (deliverableDissemination != null && deliverableDissemination.getConfidentialUrl() != null
             && !deliverableDissemination.getConfidentialUrl().isEmpty()) {
             delivConfidentialUrl = deliverableDissemination.getConfidentialUrl().replace(" ", "%20");
-            System.out.println("confidential " + delivConfidentialUrl);
           }
           if (deliverableDissemination != null && deliverableDissemination.getIsOpenAccess() != null) {
             if (deliverableDissemination.getIsOpenAccess() == true) {
@@ -3943,7 +3941,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
             }
           }
         } catch (Exception e) {
-          e.printStackTrace();
+          LOG.warn("Could not read the CRP outcomes of a deliverable: {}", e.toString());
         }
 
         // Deliverable Cluster participants
@@ -4220,7 +4218,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
                 .collect(Collectors.toList()).get(0);
             }
           } catch (Exception e) {
-            LOG.error("Error getting Deliverable Disseminations: " + e.getMessage());
+            LOG.error("Error getting Deliverable Disseminations", e);
           }
           if (deliverableDissemination != null && deliverableDissemination.getAlreadyDisseminated() != null
             && deliverableDissemination.getAlreadyDisseminated() == true) {
@@ -4242,7 +4240,6 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
           if (deliverableDissemination != null && deliverableDissemination.getConfidentialUrl() != null
             && !deliverableDissemination.getConfidentialUrl().isEmpty()) {
             delivConfidentialUrl = deliverableDissemination.getConfidentialUrl().replace(" ", "%20");
-            System.out.println("confidential " + delivConfidentialUrl);
           }
           if (deliverableDissemination != null && deliverableDissemination.getIsOpenAccess() != null) {
             if (deliverableDissemination.getIsOpenAccess() == true) {
@@ -6601,11 +6598,8 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
           imageurl = null;
         }
         if (url != null && url.exists()) {
-          // System.out.println("Project: " + projectHighlight.getProject().getId() + " PH: " +
-          // projectHighlight.getId());
           try {
             imageFile = Image.getInstance(FileManager.readURL(url));
-            // System.out.println("W: " + imageFile.getWidth() + " \nH: " + imageFile.getHeight());
             if (imageFile.getWidth() >= imageFile.getHeight()) {
               imageWidth = pageWidth;
               imageHeigth = imageFile.getHeight() * (((pageWidth * 100) / imageFile.getWidth()) / 100);
@@ -6613,7 +6607,6 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
               imageHeigth = pageHeigth;
               imageWidth = imageFile.getWidth() * (((pageHeigth * 100) / imageFile.getHeight()) / 100);
             }
-            // System.out.println("New W: " + imageWidth + " \nH: " + imageHeigth);
             width = (int) imageWidth;
             heigth = (int) imageHeigth;
             // If successful, process the message
@@ -7735,7 +7728,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
       }
       this.bucketName = this.config.getMicroserviceBucketname();
     } catch (final Exception e) {
-      System.out.println("error getting report configuration data " + e);
+      LOG.warn("Could not get the report configuration data", e);
     }
   }
 
@@ -7809,7 +7802,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
       String crossCuttingValue = this.buildCrossCuttingSummary();
       jsonData.put("crossCutting", crossCuttingValue);
     } catch (Exception e) {
-      System.out.println("Error setting reporting summary JSON data: " + e.getMessage());
+      LOG.error("Could not set the reporting summary JSON data", e);
     }
     
     // Set PDF options
@@ -7824,14 +7817,14 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
       jsonOptions.put("footer", footerMap);
       jsonOptions.put("timeout", "300000");
     } catch (Exception e) {
-      System.out.println("Error setting jsonOptions: " + e.getMessage());
+      LOG.error("Could not set the reporting summary JSON options", e);
     }
     
     try {
       jsonRoot.put("data", jsonData);
       jsonRoot.put("options", jsonOptions);
     } catch (Exception e) {
-      System.out.println("Error setting jsonRoot info: " + e.getMessage());
+      LOG.error("Could not set the reporting summary JSON root", e);
     }
     
     // Load microservice configuration and cluster template data
@@ -7849,14 +7842,14 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
       jsonRoot.put("bucketName", bucketName);
       jsonRoot.put("templateData", this.clusterReportTemplateData);
     } catch (Exception e) {
-      System.out.println("Error setting report name and bucket: " + e.getMessage());
+      LOG.error("Could not set the reporting summary report name and bucket", e);
     }
     
     String apiKey = null;
     try {
       apiKey = this.config.getMicroserviceApiKey();
     } catch (final Exception e) {
-      System.out.println("Error getting microservice apiKey: " + e);
+      LOG.error("Could not get the microservice API key", e);
     }
 
     try {
@@ -7865,22 +7858,18 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
       jsonMainRoot.put("data", jsonRoot);
       jsonMainRoot.put("pattern", "pdf.generate");
     } catch (Exception e) {
-      System.out.println("Error setting jsonRoot and jsonMainRoot information: " + e);
+      LOG.error("Could not set the reporting summary JSON main root", e);
     }
     
     try {
       final String jsonOutput = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(jsonMainRoot);
-      // Only generate JSON file in non-production environments (local/test)
-      if (!this.config.isProduction()) {
-        this.persistPayload(objectMapper, jsonMainRoot);
-      }
       
-      System.out.println("Sending cluster report to microservice: " + reportName);
+      LOG.info("Sending the cluster report {} to the microservice", reportName);
       // Using sendClusterReportQueueMessage for cluster/project summary reports
       this.microserviceReportAction.sendClusterReportQueueMessage(jsonOutput, reportName);
       
     } catch (final java.io.IOException e) {
-      System.out.println("Error generating JSON: " + e);
+      LOG.error("Could not generate the reporting summary JSON", e);
     }
     
     return SUCCESS;
@@ -8228,10 +8217,6 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
         if (locElement != null && locElement.getIsoAlpha2() != null && !locElement.getIsoAlpha2().trim().isEmpty()) {
           String isoAlpha2 = locElement.getIsoAlpha2().toLowerCase();
           locationData.put("isoAlpha2", isoAlpha2);
-          String flagUrl = "https://marlo-pdf-resources-dev.s3.us-east-1.amazonaws.com/flags/" + isoAlpha2 + ".svg";
-          System.out.println("[buildPartnerLocations] Country Flag - Name: " + (locElement.getName() != null ? locElement.getName() : "N/A") + ", ISO Alpha2: " + isoAlpha2 + ", Flag URL: " + flagUrl);
-        } else {
-          System.out.println("[buildPartnerLocations] Country Flag - Name: " + (locElement != null && locElement.getName() != null ? locElement.getName() : "N/A") + ", ISO Alpha2: NULL or empty - Flag URL not generated");
         }
         locationData.put("city",
           institutionLocation != null ? institutionLocation.getCity() : null);
@@ -8835,10 +8820,6 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
           if (c.getLocElement().getIsoAlpha2() != null && !c.getLocElement().getIsoAlpha2().trim().isEmpty()) {
             String isoAlpha2 = c.getLocElement().getIsoAlpha2().toLowerCase();
             countryData.put("isoAlpha2", isoAlpha2);
-            String flagUrl = "https://marlo-pdf-resources-dev.s3.us-east-1.amazonaws.com/flags/" + isoAlpha2 + ".svg";
-            System.out.println("[buildOICRData] Country Flag - Name: " + countryName + ", ISO Alpha2: " + isoAlpha2 + ", Flag URL: " + flagUrl);
-          } else {
-            System.out.println("[buildOICRData] Country Flag - Name: " + countryName + ", ISO Alpha2: NULL or empty - Flag URL not generated");
           }
           return countryData;
         })
@@ -9558,10 +9539,6 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
                 if (locElement.getIsoAlpha2() != null && !locElement.getIsoAlpha2().trim().isEmpty()) {
                   String isoAlpha2 = locElement.getIsoAlpha2().toLowerCase();
                   countryData.put("isoAlpha2", isoAlpha2);
-                  String flagUrl = "https://marlo-pdf-resources-dev.s3.us-east-1.amazonaws.com/flags/" + isoAlpha2 + ".svg";
-                  System.out.println("[buildInnovationData] Country Flag - Name: " + countryName + ", ISO Alpha2: " + isoAlpha2 + ", Flag URL: " + flagUrl);
-                } else {
-                  System.out.println("[buildInnovationData] Country Flag - Name: " + countryName + ", ISO Alpha2: NULL or empty - Flag URL not generated");
                 }
                 countries.add(countryData);
               }
@@ -10225,7 +10202,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
           .sorted((s1, s2) -> s1.getId().compareTo(s2.getId()))
           .collect(Collectors.toList());
       } catch (Exception e) {
-        e.printStackTrace();
+        LOG.warn("Could not sort the deliverables of the report", e);
         safeList = new ArrayList<>();
       }
       for (Deliverable deliverable : safeList) {
@@ -10237,7 +10214,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
           try {
             deliverableData = this.buildDeliverableData(deliverable);
           } catch (Exception ex) {
-            ex.printStackTrace();
+            LOG.warn("Could not build the data of a deliverable: {}", ex.toString());
             continue;
           }
           if (deliverableData == null) {
@@ -10251,7 +10228,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
           }
           deliverables.add(deliverableData);
         } catch (Exception exAll) {
-          exAll.printStackTrace();
+          LOG.warn("Could not add a deliverable to the report: {}", exAll.toString());
         }
       }
     }
@@ -10313,8 +10290,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
       } else {
       }
     } catch (Exception e) {
-      System.err.println("[buildActivitiesList] ERROR building activities list: " + e.getMessage());
-      e.printStackTrace();
+      LOG.error("Could not build the activities list", e);
     }
 
     return activities;
@@ -10518,10 +10494,6 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
           if (l.getLocElement().getIsoAlpha2() != null && !l.getLocElement().getIsoAlpha2().trim().isEmpty()) {
             String isoAlpha2 = l.getLocElement().getIsoAlpha2().toLowerCase();
             countryData.put("isoAlpha2", isoAlpha2);
-            String flagUrl = "https://marlo-pdf-resources-dev.s3.us-east-1.amazonaws.com/flags/" + isoAlpha2 + ".svg";
-            System.out.println("[buildDeliverableData] Country Flag - Name: " + countryName + ", ISO Alpha2: " + isoAlpha2 + ", Flag URL: " + flagUrl);
-          } else {
-            System.out.println("[buildDeliverableData] Country Flag - Name: " + countryName + ", ISO Alpha2: NULL or empty - Flag URL not generated");
           }
           return countryData;
         })
@@ -10824,7 +10796,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
               data.put("disseminationChannel", this.getSanitizedText(dissemination.getDisseminationChannel()));
             }
           } catch (Exception e) {
-            LOG.error("Error getting repository channel for deliverable " + deliverable.getId() + ": " + e);
+            LOG.error("Error getting repository channel for deliverable {}", deliverable.getId(), e);
             data.put("disseminationChannel", this.getSanitizedText(dissemination.getDisseminationChannel()));
           }
         }
@@ -10920,7 +10892,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
           handle = this.getSanitizedText(handleElement.getElementValue());
         }
       } catch (Exception e) {
-        LOG.error("Error getting Handle for deliverable " + deliverable.getId() + ": " + e);
+        LOG.error("Error getting Handle for deliverable {}", deliverable.getId(), e);
       }
 
       // Get DOI (metadata element ID 36)
@@ -10934,7 +10906,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
           doi = this.getSanitizedText(doiElement.getElementValue());
         }
       } catch (Exception e) {
-        LOG.error("Error getting DOI for deliverable " + deliverable.getId() + ": " + e);
+        LOG.error("Error getting DOI for deliverable {}", deliverable.getId(), e);
       }
 
       // Build metadata elements list (excluding Handle and DOI as they are shown separately)
@@ -11083,7 +11055,7 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
           }
         }
       } catch (Exception e) {
-        LOG.error("Error getting shfrm actions and subactions for deliverable " + deliverable.getId() + ": " + e);
+        LOG.error("Error getting shfrm actions and subactions for deliverable {}", deliverable.getId(), e);
       }
 
       if (!shfrmPriorityActionsList.isEmpty()) {
@@ -11509,25 +11481,6 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
     return hasPngExtension ? baseName + ".png" : baseName;
   }
 
-  private void persistPayload(com.fasterxml.jackson.databind.ObjectMapper objectMapper, Object jsonRoot) {
-    FileWriter writer = null;
-    try {
-      File payloadFile = new File(System.getProperty("user.dir"),
-        "reporting-summary-payload-" + System.currentTimeMillis() + ".json");
-      writer = new FileWriter(payloadFile);
-      objectMapper.writerWithDefaultPrettyPrinter().writeValue(writer, jsonRoot);
-    } catch (Exception e) {
-      LOG.warn("Unable to persist reporting summary payload", e);
-    } finally {
-      if (writer != null) {
-        try {
-          writer.close();
-        } catch (IOException ignored) {
-        }
-      }
-    }
-  }
-
   /**
    * Method to determine the ordinal suffix for a given day
    * 
@@ -11566,14 +11519,18 @@ public class ReportingSummaryAction extends BaseSummariesAction implements Summa
       this
         .setProjectID(Long.parseLong(StringUtils.trim(this.getRequest().getParameter(APConstants.PROJECT_REQUEST_ID))));
       this.setCrpSession(this.getLoggedCrp().getAcronym());
+    } catch (NumberFormatException e) {
+      // A missing or non-numeric projectID is a bad request; the exception is not logged because its message repeats
+      // the value the request sent
+      LOG.warn("The {} parameter is missing or not a number", APConstants.PROJECT_REQUEST_ID);
     } catch (Exception e) {
-      LOG.error("Failed to get " + APConstants.PROJECT_REQUEST_ID + " parameter. Exception: " + e.getMessage());
+      LOG.error("Failed to get the CRP of the project {}", this.getProjectID(), e);
     }
     // Get project from DB
     try {
       this.setProject(projectManager.getProjectById(this.getProjectID()));
     } catch (Exception e) {
-      LOG.error("Failed to get project. Exception: " + e.getMessage());
+      LOG.error("Failed to get project", e);
     }
     if (this.getSelectedPhase() != null && project != null
       && project.getProjecInfoPhase(this.getSelectedPhase()) != null) {
